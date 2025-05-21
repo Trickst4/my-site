@@ -10,30 +10,29 @@ const outputValue = (value) => {
   return value;
 };
 
-const nodeFormatters = {
-  added: (node, fullPath) => [
-    `Property '${fullPath}' was added with value: ${outputValue(node.value)}`,
-  ],
-  removed: (node, fullPath) => [
-    `Property '${fullPath}' was removed`,
-  ],
-  changed: (node, fullPath) => [
-    `Property '${fullPath}' was updated. From ${outputValue(node.oldValue)} to ${outputValue(node.newValue)}`,
-  ],
-  nested: (node, fullPath, formattedChildren) => formattedChildren,
-  default: () => [],
-};
-
 const formatNode = (node, path = '') => {
-  const { key, type, children } = node;
+  const {
+    key, type, value, oldValue, newValue, children,
+  } = node;
+
   const fullPath = path === '' ? key : `${path}.${key}`;
+  // Так и не понял какую функцию надо изменить, поэтому строчку выше оставил как есть
 
   const formattedChildren = children
     ? children.flatMap(child => formatNode(child, fullPath))
     : [];
 
-  const formatter = nodeFormatters[type] || nodeFormatters.default;
-  return formatter(node, fullPath, formattedChildren);
+  // Диспетчеризация по ключу вместо switch
+  const formatters = {
+    added: () => [`Property '${fullPath}' was added with value: ${outputValue(value)}`],
+    removed: () => [`Property '${fullPath}' was removed`],
+    changed: () => [`Property '${fullPath}' was updated. From ${outputValue(oldValue)} to ${outputValue(newValue)}`],
+    nested: () => formattedChildren,
+    // Если тип не найден, возвращаем пустой массив
+    default: () => [],
+  };
+
+  return (formatters[type] || formatters.default)();
 };
 
 const plainFormatDiff = (diff) => {

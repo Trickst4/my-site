@@ -1,47 +1,56 @@
 import _ from 'lodash';
 
-const outputValue = (value) => {
-  if (_.isObject(value)) {
-    return '[complex value]';
+const indentSize = 4;
+
+const indent = depth => ' '.repeat((depth * indentSize)); // Определяем отступы с учетом смещения влево
+
+const stringify = (value, depth) => {
+  if (!_.isObject(value)) {
+    return value;
   }
-  if (typeof value === 'string') {
-    return `'${value}'`;
-  }
-  return value;
+  const lines = Object.entries(value)
+    .map(([key, val]) => `${indent(depth + 1)}${key}: ${stringify(val, depth + 1)}`);
+  return `{\n${lines.join('\n')}\n${indent(depth)}}`;
 };
 
-const formatNode = (node, path = '') => {
+const formatters = {
+  nested: (node, depth, formattedChildren) => `${indent(depth)}${node.key}: {\n${formattedChildren}\n${indent(depth)}}`,
+  unchanged: (node, depth) => `${indent(depth)}${node.key}: ${stringify(node.value, depth)}`,
+  changed: (node, depth) => [
+    `${indent(depth).slice(2)}- ${node.key}: ${stringify(node.oldValue, depth)}`,
+    `${indent(depth).slice(2)}+ ${node.key}: ${stringify(node.newValue, depth)}`,
+  ].join('\n'),
+  removed: (node, depth) => `${indent(depth).slice(2)}- ${node.key}: ${stringify(node.value, depth)}`,
+  added: (node, depth) => `${indent(depth).slice(2)}+ ${node.key}: ${stringify(node.value, depth)}`,
+};
+
+export const formatNode = (node, depth) => {
   const {
-    key, type, value, oldValue, newValue, children,
+    key, type, children,
   } = node;
 
-  const fullPath = path === '' ? key : `${path}.${key}`;
-  // Так и не понял какую функцию надо изменить, поэтому строчку выше оставил как есть
+  if (type === undefined) {
+    throw new Error(`Тип узла не определен для ключа: ${key}`);
+  }
 
-  const formattedChildren = children
-    ? children.flatMap(child => formatNode(child, fullPath))
-    : [];
+  const formattedChildren = children ? children.map(child => formatNode(child, depth + 1)).join('\n') : '';
 
-  // Диспетчеризация по ключу вместо switch
-  const formatters = {
-    added: () => [`Property '${fullPath}' was added with value: ${outputValue(value)}`],
-    removed: () => [`Property '${fullPath}' was removed`],
-    changed: () => [`Property '${fullPath}' was updated. From ${outputValue(oldValue)} to ${outputValue(newValue)}`],
-    nested: () => formattedChildren,
-    // Если тип не найден, возвращаем пустой массив
-    default: () => [],
-  };
+  const formatter = formatters[type];
+  if (!formatter) {
+    throw new Error(`Неизвестный тип узла: ${type}`);
+  }
 
-  return (formatters[type] || formatters.default)();
+  // Pass all necessary arguments to the formatter function
+  return formatter(node, depth, formattedChildren);
 };
 
-const plainFormatDiff = (diff) => {
-  const iter = (nodes) => {
-    const lines = nodes.flatMap(node => formatNode(node)).join('\n');
-    return lines;
+const stylishFormatDiff = (diff) => {
+  const iter = (nodes, depth) => {
+    const lines = nodes.map(node => formatNode(node, depth));
+    return `{\n${lines.join('\n')}\n}`;
   };
 
-  return iter(diff);
+  return iter(diff, 1);
 };
 
-export default plainFormatDiff;
+export default stylishFormatDiff;
